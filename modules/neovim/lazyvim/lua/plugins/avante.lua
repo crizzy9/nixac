@@ -1,0 +1,131 @@
+return {
+  -- "yetone/avante.nvim",
+  -- event = "VeryLazy",
+  -- lazy = false,
+  -- version = false, -- set this if you want to always pull the latest change
+  -- opts = {
+  --   -- add any opts here
+  --   -- TODO: change rag host mount to a list of key directories only
+  --   -- rag_service = {
+  --   --   enabled = true, -- Enables the RAG service
+  --   --   host_mount = { os.getenv("HOME") .. "/Documents", os.getenv("HOME") .. "/personal" }, -- Mount specific directories
+  --   --   runner = "nix",
+  --   --   provider = "openai", -- The provider to use for RAG service (e.g. openai or ollama)
+  --   --   llm_model = "gpt-4.5-preview-2025-02-27", -- The LLM model to use for RAG service
+  --   --   embed_model = "text-embedding-3-large", -- The embedding model to use for RAG service
+  --   --   endpoint = "https://api.openai.com/v1", -- The API endpoint for RAG service
+  --   -- },
+  --
+  --   rag_service = { -- RAG Service configuration
+  --     enabled = true, -- Enables the RAG service
+  --     host_mount = os.getenv("HOME"), -- Host mount path for the rag service (Docker will mount this path)
+  --     runner = "nix", -- Runner for the RAG service (can use docker or nix)
+  --     llm = { -- Language Model (LLM) configuration for RAG service
+  --       provider = "openai", -- LLM provider
+  --       endpoint = "https://api.openai.com/v1", -- LLM API endpoint
+  --       api_key = "OPENAI_API_KEY", -- Environment variable name for the LLM API key
+  --       model = "gpt-5-mini", -- LLM model name
+  --       extra = nil, -- Additional configuration options for LLM
+  --     },
+  --     embed = { -- Embedding model configuration for RAG service
+  --       provider = "openai", -- Embedding provider
+  --       endpoint = "https://api.openai.com/v1", -- Embedding API endpoint
+  --       api_key = "OPENAI_API_KEY", -- Environment variable name for the embedding API key
+  --       model = "text-embedding-3-large", -- Embedding model name
+  --       extra = nil, -- Additional configuration options for the embedding model
+  --     },
+  --   },
+  --
+  --   provider = "claude-sonnet-4",
+  --   -- provider = "openai/gpt-5",
+  --
+  --   providers = {
+  --     ["openai/gpt-5"] = {
+  --       model = "gpt-5",
+  --       __inherited_from = "openai",
+  --     },
+  --     ["openai/gpt-5-mini"] = {
+  --       model = "gpt-5-mini",
+  --       __inherited_from = "openai",
+  --     },
+  --     ["openai/gpt-5-nano"] = {
+  --       model = "gpt-5-nano",
+  --       __inherited_from = "openai",
+  --     },
+  --     ["openai/gpt-4.1"] = {
+  --       model = "gpt-4.1",
+  --       __inherited_from = "openai",
+  --     },
+  --     ["openai/o1"] = {
+  --       __inherited_from = "openai",
+  --       model = "o1",
+  --     },
+  --     ["openai/o3-mini"] = {
+  --       model = "o3-mini",
+  --       __inherited_from = "openai",
+  --     },
+  --     ["gemini/gemini-2.5-pro"] = {
+  --       model = "gemini-2.5-pro",
+  --       __inherited_from = "gemini",
+  --     },
+  --     ["gemini/gemini-2.5-flash"] = {
+  --       model = "gemini-2.5-flash",
+  --       __inherited_from = "gemini",
+  --     },
+  --     ["claude-sonnet-4"] = {
+  --       model = "claude-sonnet-4-20250514",
+  --       __inherited_from = "claude",
+  --     },
+  --     ["claude-opus-4"] = {
+  --       model = "claude-opus-4-20250514",
+  --       __inherited_from = "claude",
+  --     },
+  --     ["claude-opus-4-1"] = {
+  --       model = "claude-opus-4-1-20250805",
+  --       __inherited_from = "claude",
+  --     },
+  --     ["claude-3.7"] = {
+  --       model = "claude-3-7-sonnet-20250219",
+  --       __inherited_from = "claude",
+  --     },
+  --   },
+  -- },
+  --
+  -- -- if you want to build from source then do `make BUILD_FROM_SOURCE=true`
+  -- build = "make",
+  -- -- build = "powershell -ExecutionPolicy Bypass -File Build.ps1 -BuildFromSource false" -- for windows
+  -- dependencies = {
+  --   "stevearc/dressing.nvim",
+  --   "nvim-lua/plenary.nvim",
+  --   "MunifTanjim/nui.nvim",
+  --   --- The below dependencies are optional,
+  --   -- "hrsh7th/nvim-cmp", -- autocompletion for avante commands and mentions
+  --   -- "nvim-tree/nvim-web-devicons", -- or echasnovski/mini.icons
+  --   -- "zbirenbaum/copilot.lua", -- for providers='copilot'
+  --   {
+  --     -- support for image pasting
+  --     "HakonHarnes/img-clip.nvim",
+  --     event = "VeryLazy",
+  --     opts = {
+  --       -- recommended settings
+  --       default = {
+  --         embed_image_as_base64 = false,
+  --         prompt_for_file_name = false,
+  --         drag_and_drop = {
+  --           insert_mode = true,
+  --         },
+  --         -- required for Windows users
+  --         use_absolute_path = true,
+  --       },
+  --     },
+  --   },
+  --   {
+  --     -- Make sure to set this up properly if you have lazy=true
+  --     "MeanderingProgrammer/render-markdown.nvim",
+  --     opts = {
+  --       file_types = { "markdown", "Avante" },
+  --     },
+  --     ft = { "markdown", "Avante" },
+  --   },
+  -- },
+}
