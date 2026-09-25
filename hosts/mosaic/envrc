@@ -1,0 +1,192 @@
+# shellcheck shell=bash
+# ~/dev/mosaic/.envrc — ONE direnv file for every Mosaic checkout.
+#
+# This is nixac/hosts/mosaic/envrc; hosts/mosaic/home.nix symlinks it into
+# each Mosaic dev root (~/dev/mosaic, ~/dev/mosaic2) and whitelists it, so no
+# Mosaic repo carries a flake.nix, flake.lock or .envrc and nothing nix-related
+# can leak into a commit. The devShells it loads live next to it in flake.nix.
+#
+# ── Layout it serves ─────────────────────────────────────────────────────────
+# Every repo is a bare clone with one worktree directory per branch:
+#   <root>/mosaic-rails-api/.bare            the repository (bare)
+#   <root>/mosaic-rails-api/.git             "gitdir: ./.bare" — makes the
+#                                            container answer git commands
+#   <root>/mosaic-rails-api/party/           worktree, one per branch
+#   <root>/mosaic-rails-api/AI-123/          `wt switch -c AI-123` puts it here
+# A plain clone directly under <root> (the old layout) still works: the logic
+# below keys on git's toplevel, not on path depth.
+#
+# ── How it works ─────────────────────────────────────────────────────────────
+# direnv evaluates this file with cwd = <root>, not the directory you moved
+# into, and offers no variable naming that directory. Its source_env does
+# `pushd "$(pwd)"; pushd <this dir>` first, though, so the entered directory
+# is one below the top of bash's directory stack: ${DIRSTACK[1]}. From it we
+# ask git for the worktree toplevel (a bare container or a non-git dir has
+# none → no shell), map the worktree to its repo via the remote URL, and `cd`
+# INTO the worktree before `use flake` — so every $PWD in the flake's shellHook
+# (BUNDLE_PATH, GEM_HOME, node_modules/.bin) and direnv_layout_dir
+# (<worktree>/.direnv: nix-direnv cache, throwaway npmrc) resolve exactly as a
+# per-checkout .envrc would give them.
+#
+# direnv only re-evaluates when the .envrc path or a watched file changes, and
+# this path is the same for every worktree under <root> — on its own it would
+# keep the FIRST worktree's environment as you cd into a second. The marker
+# below closes that gap: this file creates <cache>/direnv/mosaic-active/<key>,
+# deletes any other, and watches its own. The zsh chpwd hook
+# (hosts/mosaic/direnv-siblings.zsh) computes the same key for the new cwd and
+# deletes every marker that does not match; the watched file vanishing is what
+# makes direnv reload. Inside one worktree nothing changes and nothing
+# reloads. Without the hook — a fresh shell, `direnv exec`, an editor — a load
+# still picks the right worktree; the hook only matters when moving between
+# worktrees inside one interactive shell.
+#
+# ── Secrets ──────────────────────────────────────────────────────────────────
+# op:// references are POINTERS, not secrets; values are fetched from 1Password
+# at load time and cached by direnv with the rest of the environment. They run
+# BEFORE `use flake` — that ordering is load-bearing: direnv applies the
+# devShell by evaluating `nix print-dev-env`, which REPLACES the environment,
+# so anything exported after `use flake` is invisible to the flake's shellHook
+# and its "token is not set" warning fires even though the token resolves fine
+# a moment later. op_export / op_notes_export come from home/tools/onepassword.nix
+# and are deliberately non-fatal: signed out of 1Password, you still get the
+# shell, minus the private-registry credential.
+
+mosaic_root="$PWD"
+# The hook reads this to know it is inside a Mosaic root, whichever one.
+export MOSAIC_ROOT="$mosaic_root"
+
+# The flake lives beside this file. BASH_SOURCE is the .envrc symlink (relative
+# to the root, which is still the cwd here — this must stay ABOVE the `cd`
+# below); resolving it lands in nixac/hosts/mosaic, so nothing hardcodes where
+# nixac is checked out. `path:` (not the git+file default) so nix copies only
+# that directory and never warns about nixac's dirty tree.
+flake_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]:-$mosaic_root/.envrc}")")"
+flake="path:${flake_dir:-$HOME/nixac/hosts/mosaic}"
+
+# ── Which worktree was entered? ──────────────────────────────────────────────
+entered="${DIRSTACK[1]:-$PWD}"
+top="$(git -C "$entered" rev-parse --show-toplevel 2>/dev/null || true)"
+rel=""
+case "$top" in
+  "$mosaic_root"/*) rel="${top#"$mosaic_root"/}" ;;   # e.g. mosaic-rails-api/party
+esac
+
+# ── Marker: let the zsh hook force a reload on a worktree switch ────────────
+# Same key derivation as the hook: toplevel relative to the root, / → __.
+marker_dir="${XDG_CACHE_HOME:-$HOME/.cache}/direnv/mosaic-active"
+key="${rel//\//__}"
+marker="$marker_dir/${key:-_none}"
+mkdir -p "$marker_dir"
+for stale in "$marker_dir"/*; do
+  if [ -e "$stale" ] && [ "$stale" != "$marker" ]; then
+    rm -f -- "$stale"
+  fi
+done
+: > "$marker"
+watch_file "$marker"
+
+if [ -n "$rel" ]; then
+  # Repo identity from the remote, so any worktree or a renamed clone maps to
+  # its repo's devShell. Falls back to the first path component.
+  repo="$(git -C "$top" remote get-url origin 2>/dev/null | sed -E 's#.*/##; s#\.git$##')"
+  repo="${repo:-${rel%%/*}}"
+
+  cd "$top"
+  load_dotenv=1
+
+  case "$repo" in
+    mosaic-rails-api | mosaic-api-server)
+      # sidekiq-pro is served from the private enterprise.contribsys.com source
+      # in both Gemfiles; bundler reads the credential from this variable.
+      # Without it `bundle install` fails partway with a 401 that doesn't name
+      # the cause.
+      #
+      # 1Password item: "Sidekiq Enterprise" (Developers vault). The credential
+      # is free text in the item's Notes, not a structured field — hence
+      # op_notes_export rather than op_export.
+      op_notes_export \
+        "op://375g5ek3y56gtzwyctdxijz5ua/t6zbjiodcca4kd7igrtrm2e7ni/notesPlain" \
+        BUNDLE_ENTERPRISE__CONTRIBSYS__COM
+      ;;
+
+    mosaic-ai-server)
+      # 1Password item: "AI Taskforce Credentials for BullMQ Pro" (Developers
+      # vault), linked from the repo README step 1. All three credentials live
+      # as free text in the item's Notes, so they're parsed out of the note in
+      # a single read (one unlock, one op call).
+      op_notes_export \
+        "op://375g5ek3y56gtzwyctdxijz5ua/suk4uvkg3zh42pyfyugmncpaba/notesPlain" \
+        NPM_TASKFORCESH_TOKEN \
+        TASKFORCE_DOCKER_USER \
+        TASKFORCE_DOCKER_PASS
+      ;;
+
+    mosaic-web)
+      # package.json depends on four @mosaicapp/* packages (command-palette,
+      # data-importer, react-calendar-timeline, timeline-web). They live on
+      # registry.npmjs.org but are PRIVATE, and npm hides private packages
+      # from unauthenticated requests behind a 404 — so without a token
+      # `yarn install` fails partway with
+      #   error https://registry.npmjs.org/@mosaicapp/command-palette/-/...tgz:
+      #   Request failed "404 Not Found"
+      # which reads like a deleted package rather than a missing credential.
+      #
+      # CI authenticates with the NPM_TOKEN repo secret:
+      #   npm config set '//registry.npmjs.org/:_authToken' "${{ secrets.NPM_TOKEN }}"
+      #   (.github/workflows/run_coverage.yml:96)
+      #
+      # 1Password item: "Mosaic NPM Readonly" (Developers vault), a secure note
+      # whose `text` field holds the 40-char readonly automation token. (The
+      # similar "Mobile npm private packages readonly access" item is the
+      # mobile-specific twin; this is the org-wide one.)
+      #
+      # Exporting NPM_TOKEN alone is not enough for yarn v1 — nothing
+      # references the variable — and the tracked .npmrc must stay empty: a
+      # bare ${NPM_TOKEN} line there would expand to an empty token in CI
+      # (which sets the secret on the user-level npmrc, not the env) and break
+      # an install that currently works. So this writes a THROWAWAY user-level
+      # npmrc under direnv's own state dir and points npm/yarn at it via
+      # NPM_CONFIG_USERCONFIG — the same user-level mechanism CI uses, without
+      # touching ~/.npmrc or the repo.
+      op_export NPM_TOKEN "op://375g5ek3y56gtzwyctdxijz5ua/hs7tfzzqxtbz45nq26i32i4bwm/text"
+      if [ -n "${NPM_TOKEN:-}" ]; then
+        npmrc_dir="$(direnv_layout_dir)"
+        mkdir -p "$npmrc_dir"
+        printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > "$npmrc_dir/npmrc"
+        chmod 600 "$npmrc_dir/npmrc"
+        export NPM_CONFIG_USERCONFIG="$npmrc_dir/npmrc"
+      fi
+
+      # No .env here. The .env.<target> files are committed build config, not
+      # secrets, and every script loads the one it wants explicitly via
+      # `env-cmd .env.<target>`. Sourcing one would silently override
+      # whichever target you actually meant to run.
+      load_dotenv=""
+      ;;
+
+    mosaic-chat-bots)
+      # No 1Password step: every dependency in package-lock.json is public (no
+      # .npmrc, no private scope), so `npm install` needs no token.
+      ;;
+
+    *)
+      flake=""
+      ;;
+  esac
+
+  if [ -n "$flake" ]; then
+    log_status "mosaic: $repo  ($rel)"
+    use flake "$flake#$repo"
+
+    # Load .env the way the Makefiles / dotenv-rails / NestJS ConfigModule do,
+    # so `rails s`, `bin/rspec`, `npm test` see the same variables whether or
+    # not you go through make. Anything set here wins over the 1Password values
+    # and the shellHook defaults above, which is what you want for a local
+    # override.
+    if [ -n "$load_dotenv" ]; then
+      dotenv_if_exists .env
+    fi
+  else
+    log_status "mosaic: no devShell for $repo ($rel) — add one in nixac/hosts/mosaic/devShells/"
+  fi
+fi
